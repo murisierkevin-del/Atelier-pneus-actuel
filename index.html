@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier – Note rapide</title>
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root{--gap:12px;}
+  *{box-sizing:border-box;}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,sans-serif;margin:0;background:#f6f7f9;color:#111;}
+  header{padding:20px 16px;background:#111;color:#fff;}
+  header h1{margin:0;font-size:20px;}
+  main{padding:16px;max-width:1000px;margin:auto;}
+  .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:16px;margin-bottom:16px;}
+  label{font-weight:600;display:block;margin-bottom:6px;}
+  input[type="number"], input[type="text"]{padding:10px;border:1px solid #dcdcdc;border-radius:8px;}
+  input[type="number"]{width:120px;text-align:center;font-variant-numeric:tabular-nums;}
+  input[type="checkbox"]{transform:scale(1.2);}
+  select{padding:8px 10px;border:1px solid #dcdcdc;border-radius:8px;background:#fff;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .row > *{flex:1 1 220px;}
+  .muted{color:#666;}
+  .right{text-align:right}
+  .total{font-size:20px;font-weight:800}
+  .pill{display:inline-block;border:1px solid #ddd;border-radius:999px;padding:6px 10px;font-size:12px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th, td{padding:8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+  th{background:#fafafa}
+  .nowrap{white-space:nowrap}
+  button{padding:10px 14px;border:0;border-radius:10px;background:#111;color:#fff;font-weight:700;cursor:pointer}
+  button.secondary{background:#fff;border:1px solid #ddd;color:#111}
+  .ok{background:#12a150}
+  .danger{background:#c62828}
+  .tag{display:inline-block;padding:2px 8px;border:1px solid #ddd;border-radius:999px;font-size:12px}
+  .tag.unpaid{background:#fff1f0;border-color:#f5c2bf}
+  .tag.paid{background:#e6f7ec;border-color:#b7e6c6}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Atelier – Note rapide</h1>
+  <div class="muted">Total auto · Impayés · Historique · Auto-complétion · Sauvegarde/Restaurer.</div>
+</header>
+
+<main>
+  <input type="hidden" id="currentId" value="">
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Client</label>
+        <input id="client" type="text" placeholder="Nom et prénom" list="clientsList" autocomplete="off">
+        <datalist id="clientsList"></datalist>
+      </div>
+      <div>
+        <label>Paiement</label>
+        <label style="display:flex;align-items:center;gap:8px">
+          <input id="paid" type="checkbox"> <span>Payé</span>
+        </label>
+      </div>
+      <div>
+        <label>Date</label>
+        <input id="date" type="text" placeholder="AAAA-MM-JJ">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Nombre de roues</label>
+        <input id="wheels" type="number" min="1" step="1" value="4">
+      </div>
+      <div class="muted">
+        Prix unitaires par roue :
+        <ul style="margin:6px 0 0 18px">
+          <li>Dépose/pose : <strong>5.00 CHF</strong>/roue</li>
+          <li>Remplacer + équilibrer : <strong>15.00 CHF</strong>/roue</li>
+        </ul>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Opération</th><th class="right">PU (CHF/roue)</th><th class="right">Roues</th><th class="right">Sous-total (CHF)</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><label><input id="op_depose" type="checkbox"> Dépose/pose</label></td>
+          <td class="right">5.00</td>
+          <td class="right"><span id="n_depose">0</span></td>
+          <td class="right"><span id="st_depose">0.00</span></td>
+        </tr>
+        <tr>
+          <td><label><input id="op_rempl" type="checkbox"> Remplacer + équilibrer</label></td>
+          <td class="right">15.00</td>
+          <td class="right"><span id="n_rempl">0</span></td>
+          <td class="right"><span id="st_rempl">0.00</span></td>
+        </tr>
+        <tr>
+          <td class="right" colspan="3"><strong>TOTAL (CHF)</strong></td>
+          <td class="right total"><span id="grand">0.00</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="row" style="margin-top:12px">
+      <button id="copy">Copier le récapitulatif</button>
+      <button id="save">Enregistrer</button>
+      <button id="reset" class="secondary">Réinitialiser</button>
+      <span id="editBadge" class="pill muted" style="display:none">Mode édition</span>
+      <span class="pill muted">Données locales</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <details open>
+      <summary>Impayés <span id="unpaidCount" class="tag unpaid">0</span></summary>
+      <div style="overflow:auto;margin-top:12px">
+        <table id="unpaidTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Détail</th>
+              <th class="nowrap">Total (CHF)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Historique complet</summary>
+      <div class="row">
+        <div>
+          <label>Recherche client</label>
+          <input id="filterClient" type="text" placeholder="Nom">
+        </div>
+        <div>
+          <label>Statut</label>
+          <select id="filterPaid">
+            <option value="Tous">Tous</option>
+            <option value="Oui">Payé</option>
+            <option value="Non">Non payé</option>
+          </select>
+        </div>
+        <div>
+          <label>Période (optionnel)</label>
+          <input id="filterFrom" type="text" placeholder="De AAAA-MM-JJ">
+        </div>
+        <div>
+          <label class="nowrap">&nbsp;</label>
+          <input id="filterTo" type="text" placeholder="à AAAA-MM-JJ">
+        </div>
+      </div>
+      <div class="tools">
+        <button id="applyFilters" class="secondary">Appliquer filtres</button>
+        <button id="clearFilters" class="secondary">Effacer filtres</button>
+        <button id="exportCsv">Exporter CSV</button>
+        <span id="stats" class="pill muted"></span>
+      </div>
+      <div style="overflow:auto;margin-top:12px">
+        <table id="histTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Détail</th>
+              <th class="nowrap">Total (CHF)</th>
+              <th>Statut</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>Sauvegarde / Restauration</summary>
+      <div class="tools">
+        <button id="backup">Télécharger sauvegarde JSON</button>
+        <label class="secondary" style="padding:10px 14px;border-radius:10px;border:1px solid #ddd;cursor:pointer">
+          Importer JSON <input id="restoreFile" type="file" accept="application/json" style="display:none">
+        </label>
+        <button id="importOld" class="secondary">Importer historiques précédents (v1/v2/v3)</button>
+        <span class="pill muted">Astuce: installe sur l’écran d’accueil via le bouton « Partager »</span>
+      </div>
+    </details>
+  </div>
+</main>
+
+<footer>© Ton atelier – Outil local HTML</footer>
+
+<script>
+// Register service worker (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(console.error);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', function(){
+  const PU_DEPOSE = 5.00;
+  const PU_REMPL = 15.00;
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const today = () => new Date().toISOString().slice(0,10);
+  const fmt = n => Number(n||0).toFixed(2);
+  const newId = () => String(Date.now()) + "-" + Math.random().toString(36).slice(2,7);
+  const KEY = 'atelier_history_v3';
+
+  const currentId = $('#currentId');
+  const client = $('#client');
+  const paid = $('#paid');
+  const dateI = $('#date');
+  const wheels = $('#wheels');
+  const opDepose = $('#op_depose');
+  const opRempl = $('#op_rempl');
+  const nDepose = $('#n_depose');
+  const nRempl = $('#n_rempl');
+  const stDepose = $('#st_depose');
+  const stRempl = $('#st_rempl');
+  const grand = $('#grand');
+  const clientsList = $('#clientsList');
+  const editBadge = $('#editBadge');
+
+  dateI.value = today();
+
+  function recalc(){
+    const n = Math.max(0, parseInt(wheels.value||"0",10));
+    const n1 = opDepose.checked ? n : 0;
+    const n2 = opRempl.checked ? n : 0;
+    const st1 = n1 * PU_DEPOSE;
+    const st2 = n2 * PU_REMPL;
+    nDepose.textContent = n1;
+    nRempl.textContent = n2;
+    stDepose.textContent = fmt(st1);
+    stRempl.textContent = fmt(st2);
+    grand.textContent = fmt(st1 + st2);
+  }
+  [wheels, opDepose, opRempl].forEach(el => {
+    el.addEventListener('input', recalc, {passive:true});
+    el.addEventListener('change', recalc);
+    el.addEventListener('click', recalc);
+  });
+  recalc();
+
+  function loadHist(){ try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch(e){ return []; } }
+  function saveHist(arr){ localStorage.setItem(KEY, JSON.stringify(arr)); refreshClientsList(); }
+
+  function addRecord(rec){ const arr = loadHist(); arr.push(rec); saveHist(arr); }
+  function updateRecord(id, patch){
+    const arr = loadHist();
+    const idx = arr.findIndex(r => r.id === id);
+    if(idx >= 0){ arr[idx] = Object.assign({}, arr[idx], patch); saveHist(arr); }
+  }
+  function removeRecord(id){
+    const arr = loadHist();
+    const idx = arr.findIndex(r => r.id === id);
+    if(idx >= 0){ arr.splice(idx,1); saveHist(arr); }
+  }
+  function getRecord(id){ const arr = loadHist(); return arr.find(r => r.id === id) || null; }
+
+  function refreshClientsList(){
+    const hist = loadHist();
+    const names = Array.from(new Set(hist.map(r => (r.client||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'fr'));
+    clientsList.innerHTML = names.map(n => `<option value="${n}"></option>`).join('');
+  }
+  refreshClientsList();
+
+  function readForm(){
+    const n = Math.max(0, parseInt(wheels.value||"0",10));
+    const items = [];
+    if(opDepose.checked) items.push({ service:'Dépose/pose', pu:5.00, q:n, st: n*5.00 });
+    if(opRempl.checked) items.push({ service:'Remplacer + équilibrer', pu:15.00, q:n, st: n*15.00 });
+    const total = items.reduce((s,x)=>s+x.st,0);
+    return {
+      id: currentId.value || newId(),
+      date: dateI.value || today(),
+      client: client.value || '-',
+      paid: paid.checked ? 'Oui' : 'Non',
+      total: Number(total.toFixed(2)),
+      items,
+      wheels: n
+    };
+  }
+  function writeForm(rec){
+    currentId.value = rec.id || '';
+    client.value = rec.client || '';
+    paid.checked = rec.paid === 'Oui';
+    dateI.value = rec.date || today();
+    wheels.value = rec.wheels || 4;
+    opDepose.checked = !!(rec.items||[]).find(i => i.service==='Dépose/pose');
+    opRempl.checked = !!(rec.items||[]).find(i => i.service==='Remplacer + équilibrer');
+    recalc();
+    editBadge.style.display = currentId.value ? 'inline-block' : 'none';
+  }
+  function clearForm(){
+    currentId.value = '';
+    client.value = '';
+    paid.checked = false;
+    dateI.value = today();
+    wheels.value = 4;
+    opDepose.checked = false;
+    opRempl.checked = false;
+    recalc();
+    editBadge.style.display = 'none';
+  }
+
+  $('#save').addEventListener('click', () => {
+    const rec = readForm();
+    if(rec.items.length === 0){
+      if(!confirm("Aucune opération sélectionnée. Enregistrer quand même ?")) return;
+    }
+    if(currentId.value){
+      updateRecord(rec.id, rec);
+      alert("Modifications enregistrées ✅");
+    } else {
+      addRecord(rec);
+      alert(rec.paid === 'Non' ? "Enregistré comme IMPAYÉ ✅" : "Enregistré ✅");
+    }
+    clearForm();
+    render();
+  });
+
+  $('#reset').addEventListener('click', () => clearForm());
+
+  $('#copy').addEventListener('click', async () => {
+    const rec = readForm();
+    const parts = [];
+    parts.push(`Client: ${rec.client}`);
+    parts.push(`Date: ${rec.date}`);
+    parts.push(`Paiement: ${rec.paid}`);
+    parts.push("");
+    rec.items.forEach(it => parts.push(`• ${it.service} — ${fmt(it.pu)} × ${it.q} = ${fmt(it.st)} CHF`));
+    parts.push("");
+    parts.push(`TOTAL: ${fmt(rec.total)} CHF`);
+    const text = parts.join("\\n");
+    try{ await navigator.clipboard.writeText(text); alert("Récapitulatif copié ✅"); }
+    catch(e){
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      alert("Récapitulatif copié ✅");
+    }
+  });
+
+  // Unpaid
+  const unpaidTable = $('#unpaidTable tbody');
+  function unpaidRow(rec){
+    const detail = (rec.items||[]).map(it => `• ${it.service} — ${fmt(it.pu)} × ${it.q} = ${fmt(it.st)} CHF`).join('<br>') || '<span class="muted">—</span>';
+    return `<tr data-id="${rec.id}">
+      <td class="nowrap">${rec.date}</td>
+      <td>${rec.client}</td>
+      <td>${detail}</td>
+      <td class="nowrap">${fmt(rec.total)}</td>
+      <td class="nowrap">
+        <button class="ok" data-action="markPaid">Marquer payé</button>
+        <button class="secondary" data-action="resume">Reprendre</button>
+        <button class="danger" data-action="delete">Supprimer</button>
+      </td>
+    </tr>`;
+  }
+  unpaidTable.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if(!btn) return;
+    const tr = e.target.closest('tr');
+    const id = tr.dataset.id;
+    if(btn.dataset.action === 'markPaid'){
+      updateRecord(id, { paid:'Oui' });
+      render();
+    } else if(btn.dataset.action === 'resume'){
+      const rec = getRecord(id);
+      if(rec) writeForm(rec);
+      window.scrollTo({top:0, behavior:'smooth'});
+    } else if(btn.dataset.action === 'delete'){
+      if(confirm('Supprimer cette entrée impayée ?')){ removeRecord(id); render(); }
+    }
+  });
+
+  // History
+  const tbody = $('#histTable tbody');
+  const stats = $('#stats');
+  function histRow(rec){
+    const badge = rec.paid === 'Oui' ? '<span class="tag paid">Payé</span>' : '<span class="tag unpaid">Non payé</span>';
+    const detail = (rec.items||[]).map(it => `• ${it.service} — ${fmt(it.pu)} × ${it.q} = ${fmt(it.st)} CHF`).join('<br>') || '<span class="muted">—</span>';
+    return `<tr data-id="${rec.id}">
+      <td class="nowrap">${rec.date}</td>
+      <td>${rec.client}</td>
+      <td>${detail}</td>
+      <td class="nowrap">${fmt(rec.total)}</td>
+      <td>${badge}</td>
+      <td class="nowrap">
+        <button class="secondary" data-action="toggle">Basculer payé</button>
+        <button class="secondary" data-action="edit">Éditer</button>
+        <button class="danger" data-action="delete">Supprimer</button>
+      </td>
+    </tr>`;
+  }
+  function applyFilters(data){
+    const name = $('#filterClient').value.trim().toLowerCase();
+    const fpaid = $('#filterPaid').value;
+    const ffrom = $('#filterFrom').value.trim();
+    const fto = $('#filterTo').value.trim();
+    return data.filter(r => {
+      if(name && !String(r.client||'').toLowerCase().includes(name)) return false;
+      if(fpaid !== 'Tous' && r.paid !== (fpaid==='Oui'?'Oui':'Non')) return false;
+      if(ffrom && new Date(r.date) < new Date(ffrom)) return false;
+      if(fto && new Date(r.date) > new Date(fto)) return false;
+      return true;
+    });
+  }
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if(!btn) return;
+    const tr = e.target.closest('tr');
+    const id = tr.dataset.id;
+    if(btn.dataset.action==='toggle'){
+      const rec = getRecord(id);
+      if(rec) updateRecord(id, { paid: rec.paid==='Oui' ? 'Non' : 'Oui' });
+      render();
+    } else if(btn.dataset.action==='edit'){
+      const rec = getRecord(id);
+      if(rec) writeForm(rec);
+      window.scrollTo({top:0, behavior:'smooth'});
+    } else if(btn.dataset.action==='delete'){
+      if(confirm('Supprimer cette entrée ?')){ removeRecord(id); render(); }
+    }
+  });
+
+  $('#applyFilters').addEventListener('click', render);
+  $('#clearFilters').addEventListener('click', () => {
+    $('#filterClient').value=''; $('#filterPaid').value='Tous';
+    $('#filterFrom').value=''; $('#filterTo').value=''; render();
+  });
+
+  $('#exportCsv').addEventListener('click', () => {
+    const data = applyFilters(loadHist());
+    const esc = s => `"${String(s).replace(/"/g,'""')}"`;
+    const rows = [["ID","Date","Client","Paiement","Total CHF","Détail services","Roues"]];
+    data.forEach(r => {
+      const detail = (r.items||[]).map(it => `${it.service} (${fmt(it.pu)}×${it.q}=${fmt(it.st)})`).join(' | ');
+      rows.push([r.id, r.date, r.client, r.paid, fmt(r.total), detail, r.wheels||""]);
+    });
+    const csv = rows.map(r => r.map(esc).join(",")).join("\n");
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `historique_atelier_${today()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Backup / Restore
+  $('#backup').addEventListener('click', () => {
+    const data = loadHist();
+    const json = JSON.stringify({key: 'atelier_history_v3', exported_at: new Date().toISOString(), data}, null, 2);
+    const blob = new Blob([json], {type:'application/json;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `atelier_historique_backup_${today()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  });
+  $('#restoreFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const obj = JSON.parse(reader.result);
+        const arr = Array.isArray(obj) ? obj : (obj && Array.isArray(obj.data) ? obj.data : []);
+        if(!Array.isArray(arr)) throw new Error("Format inconnu");
+        const existing = loadHist();
+        const ids = new Set(existing.map(r=>r.id));
+        const merged = existing.concat(arr.filter(r => r && r.id && !ids.has(r.id)));
+        saveHist(merged);
+        alert(`Import terminé: ${arr.length} éléments lus, total maintenant ${merged.length}.`);
+        render();
+      }catch(err){
+        alert("Erreur lecture JSON: " + err.message);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  document.getElementById('importOld').addEventListener('click', () => {
+    const keys = ['atelier_history_v1','atelier_history_v2','atelier_history_v3'];
+    let merged = loadHist();
+    const ids = new Set(merged.map(r=>r.id));
+    let imported = 0;
+    keys.forEach(k => {
+      if(k === 'atelier_history_v3') return;
+      try{
+        const raw = localStorage.getItem(k);
+        if(!raw) return;
+        const arr = JSON.parse(raw);
+        (arr || []).forEach((r, i) => {
+          if(!r.id){ r.id = (r.date||'') + '-' + (r.client||'') + '-' + String(i); }
+          if(!ids.has(r.id)){ merged.push(r); ids.add(r.id); imported++; }
+        });
+      }catch(e){}
+    });
+    saveHist(merged);
+    alert(`Import historiques précédents: +${imported} éléments`);
+    render();
+  });
+
+  function render(){
+    const all = loadHist();
+    const unpaid = all.filter(r => r.paid !== 'Oui');
+    const unpaidTbody = document.querySelector('#unpaidTable tbody');
+    unpaidTbody.innerHTML = unpaid.map(unpaidRow).join('');
+    document.getElementById('unpaidCount').textContent = unpaid.length;
+
+    const tbody = document.querySelector('#histTable tbody');
+    const filtered = applyFilters(all);
+    tbody.innerHTML = filtered.map(histRow).join('');
+    const stats = document.getElementById('stats');
+    stats.textContent = `${filtered.length}/${all.length} affichés · ${unpaid.length} non payés`;
+  }
+  render();
+});
+</script>
+</body>
+</html>
